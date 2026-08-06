@@ -33,6 +33,8 @@ jobs:
           branch="${MERGE_GROUP_BASE_REF:-${BASE_REF:-$GITHUB_REF_NAME}}"
           branch="${branch#refs/heads/}"
 
+          # Written to a file first, then emitted to both the job summary and the log:
+          # the summary is readable in the UI, the log is readable from the API.
           {
             echo "# ${GITHUB_EVENT_NAME}"
             echo '| field | value |'
@@ -52,4 +54,6 @@ jobs:
             echo '```'
             gh ruleset check --repo "${GITHUB_REPOSITORY}" "${GITHUB_REF_NAME}" 2>&1 || true
             echo '```'
-          } >>"${GITHUB_STEP_SUMMARY}"
+          } >/tmp/context.md
+
+          tee -a "${GITHUB_STEP_SUMMARY}" </tmp/context.md

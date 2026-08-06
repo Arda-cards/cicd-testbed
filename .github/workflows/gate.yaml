@@ -25,6 +25,8 @@ jobs:
       matrix:
         gate: [a, b]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
       - name: "Report the configured outcome"
