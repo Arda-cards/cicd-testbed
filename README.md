@@ -54,3 +54,5 @@ rather than just configuration. Cite the run.
 
 __________
 Copyright: (c) Arda Systems 2025-2026, All rights reserved
+
+<!-- experiment: merge_group payload shape -->
