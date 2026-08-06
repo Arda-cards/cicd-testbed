@@ -43,7 +43,9 @@ rather than just configuration. Cite the run.
 
 | Date | Question | Answer | Evidence |
 |---|---|---|---|
-| | | | |
+| 2026-08-06 | What names the destination branch on a `merge_group` event? | `github.event.merge_group.base_ref`, as a **full ref** (`refs/heads/main`). `github.base_ref` is empty and `github.ref_name` is the queue branch, so neither is usable. Strip `refs/heads/` before passing it to `gh ruleset check`. | run [31132061181](https://github.com/Arda-cards/cicd-testbed/actions/runs/31132061181) |
+| 2026-08-06 | Does a ruleset apply to the merge-queue ref? | No. `gh ruleset check` reports `0 rules apply` for `gh-readonly-queue/main/pr-…` and `5 rules apply` for `main` in the same run. A probe that uses `ref_name` on a queued build therefore concludes the branch is unprotected. | run [31132061181](https://github.com/Arda-cards/cicd-testbed/actions/runs/31132061181) |
+| 2026-08-06 | Does `gh pr merge` enqueue on a queue-enabled repo? | Yes, but it prints only `The merge strategy for main is set by the merge queue` and exits without confirming. The entry is created; `enqueuePullRequest` afterwards returns `Pull request is already in the queue`. The repository also needs `allow_auto_merge` set. | PR #1 |
 
 ## Related
 
