@@ -1,0 +1,54 @@
+---
+# Synthetic required checks.
+#
+# Each gate reports the outcome written in .testbed/<gate>, so an experiment
+# controls pass/fail and duration by editing a file in the pull request rather
+# than by running a real build. Format is "<pass|fail> <seconds>".
+#
+# The point is speed: a queue or ruleset experiment iterates in seconds where a
+# real repository costs minutes, and the outcome is chosen rather than coaxed.
+name: gate
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened, synchronize]
+  merge_group:
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  gate:
+    strategy:
+      fail-fast: false
+      matrix:
+        gate: [a, b]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: "Report the configured outcome"
+        env:
+          GATE: ${{ matrix.gate }}
+        run: |
+          [ "${RUNNER_DEBUG}" == 1 ] && set -xv
+          set -u
+
+          readonly control=".testbed/${GATE}"
+          if [ -r "${control}" ]; then
+            read -r outcome seconds <"${control}"
+          else
+            outcome=pass
+            seconds=0
+          fi
+
+          echo "::notice::gate ${GATE} on ${GITHUB_EVENT_NAME}: ${outcome} after ${seconds}s"
+          {
+            echo "# gate ${GATE}"
+            echo "- event: \`${GITHUB_EVENT_NAME}\`"
+            echo "- ref: \`${GITHUB_REF}\`"
+            echo "- outcome: \`${outcome}\` after ${seconds}s"
+          } >>"${GITHUB_STEP_SUMMARY}"
+
+          sleep "${seconds}"
+          [ "${outcome}" == "pass" ]

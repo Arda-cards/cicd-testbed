@@ -1,0 +1,55 @@
+---
+# Dumps what each event actually carries, so questions about payload shape are
+# answered by observation rather than by reading documentation that may not
+# match what GitHub sends.
+#
+# Written for the merge_group question in PDEV-1409: a queued entry runs on a
+# temporary gh-readonly-queue/... ref, and qualify-build-action needs to know
+# which branch is really being merged into.
+name: context
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened, synchronize]
+  merge_group:
+  push:
+
+permissions: {}
+
+jobs:
+  context:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Report the event context"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MERGE_GROUP_BASE_REF: ${{ github.event.merge_group.base_ref }}
+          MERGE_GROUP_HEAD_REF: ${{ github.event.merge_group.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          [ "${RUNNER_DEBUG}" == 1 ] && set -xv
+          set -u
+
+          branch="${MERGE_GROUP_BASE_REF:-${BASE_REF:-$GITHUB_REF_NAME}}"
+          branch="${branch#refs/heads/}"
+
+          {
+            echo "# ${GITHUB_EVENT_NAME}"
+            echo '| field | value |'
+            echo '|---|---|'
+            echo "| \`github.ref\` | \`${GITHUB_REF}\` |"
+            echo "| \`github.ref_name\` | \`${GITHUB_REF_NAME}\` |"
+            echo "| \`github.base_ref\` | \`${BASE_REF:-<empty>}\` |"
+            echo "| \`merge_group.base_ref\` | \`${MERGE_GROUP_BASE_REF:-<empty>}\` |"
+            echo "| \`merge_group.head_ref\` | \`${MERGE_GROUP_HEAD_REF:-<empty>}\` |"
+            echo "| resolved branch | \`${branch}\` |"
+            echo
+            echo '## `gh ruleset check` on the resolved branch'
+            echo '```'
+            gh ruleset check --repo "${GITHUB_REPOSITORY}" "${branch}" 2>&1 || true
+            echo '```'
+            echo '## `gh ruleset check` on `github.ref_name`'
+            echo '```'
+            gh ruleset check --repo "${GITHUB_REPOSITORY}" "${GITHUB_REF_NAME}" 2>&1 || true
+            echo '```'
+          } >>"${GITHUB_STEP_SUMMARY}"
