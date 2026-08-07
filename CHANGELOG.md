@@ -17,6 +17,18 @@ Categories, defined in [changemap.json](.github/clq/changemap.json):
   - `Fixed` for any bugfixes.
   - `Security` in case of vulnerabilities.
 
+## [2.0.0] - 2026-08-07
+
+### Changed
+
+- CODEOWNERS now covers `/.github/` alone rather than everything. Ownership of
+  every path made code-owner review mandatory on every pull request, which no
+  waiver can lift — `enqueuePullRequest` refuses a pull request awaiting
+  code-owner review regardless of who asks. Scoping ownership to the machinery
+  that enforces policy leaves the general review requirement to a gate that can
+  be waived, while the gate's own source cannot be altered without a review
+  nobody can waive.
+
 ## [1.4.0] - 2026-08-07
 
 ### Added
