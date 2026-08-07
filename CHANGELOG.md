@@ -17,6 +17,15 @@ Categories, defined in [changemap.json](.github/clq/changemap.json):
   - `Fixed` for any bugfixes.
   - `Security` in case of vulnerabilities.
 
+## [1.2.2] - 2026-08-07
+
+### Fixed
+
+- Slowed one synthetic gate so a queued entry stays in the queue long enough to
+  be interfered with. Needed to answer whether GitHub ejects a pull request that
+  is returned to draft while queued, which the design assumes but had never
+  observed.
+
 ## [1.2.1] - 2026-08-07
 
 ### Fixed
