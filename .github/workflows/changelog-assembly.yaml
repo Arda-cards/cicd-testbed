@@ -1,0 +1,48 @@
+---
+# Composes CHANGELOG.md after merge, then lets the build publish from the
+# commit it produced.
+#
+# The unit of work is a *range*: every merge since the previous assembly commit,
+# not just the merge that triggered this run. That is what makes it self-healing
+# — a failed or skipped run leaves its entries pending, and the next run picks
+# them up. The reference implementation assembles per-merge and lost two entries
+# on 2026-07-23 when three pull requests merged within 80 seconds.
+#
+# Ordering matters here and is the reverse of the reference model: in these
+# repositories CHANGELOG.md *is* the version source, so assembly must run before
+# the build rather than after it.
+name: changelog-assembly
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: changelog-assembly
+  cancel-in-progress: false
+
+jobs:
+  assemble:
+    # Never react to our own commit, or the workflow feeds on itself.
+    if: "${{ ! startsWith(github.event.head_commit.message, 'chore: assemble CHANGELOG ') }}"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ secrets.CHANGELOG_BOT_APP_ID }}
+          private-key: ${{ secrets.CHANGELOG_BOT_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: "Assemble every pending merge into one release"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: .github/scripts/assemble.sh
