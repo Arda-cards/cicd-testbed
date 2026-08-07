@@ -1,0 +1,156 @@
+---
+# The code-owner review waiver.
+#
+# A code owner comments `/waive-review <category>: <justification>` and the
+# pull request is enqueued on their authority instead of on an approval.
+#
+# The identity doing the enqueueing is a GitHub App holding bypass on the
+# Review ruleset only. That split is the point: it can waive the review
+# requirement and it cannot waive anything else, so a waived pull request still
+# has to pass every check and resolve every thread. If the Integrity ruleset is
+# unsatisfied the command has no effect, and the comment has to be repeated
+# once it is.
+#
+# Who may invoke it is decided by CODEOWNERS rather than by a list maintained
+# here, so there is one place to administer and one place to get wrong. If
+# CODEOWNERS has no `*` entry, nobody can waive.
+#
+# NOTE: uses arda-changelog-bot as the bypass identity while the purpose-built
+# ReviewOverride App does not yet exist. Creating an App requires GitHub's
+# browser manifest flow — there is no REST or GraphQL route. Everything else
+# here is final.
+name: waive-review
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+jobs:
+  waive:
+    if: "${{ github.event.issue.pull_request && contains(github.event.comment.body, '/waive-review') }}"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: "Parse the command"
+        id: command
+        env:
+          BODY: ${{ github.event.comment.body }}
+        run: |
+          [ "${RUNNER_DEBUG}" == 1 ] && set -xv
+          set -euo pipefail
+
+          # /waive-review <category>: <justification>
+          line="$(grep -m1 -oE '/waive-review[[:space:]]+[a-z-]+[[:space:]]*:.*' <<<"${BODY}" || true)"
+          if [ -z "${line}" ]; then
+            echo "::error::expected /waive-review <category>: <justification>"
+            exit 1
+          fi
+
+          category="$(sed -E 's|^/waive-review[[:space:]]+([a-z-]+)[[:space:]]*:.*|\1|' <<<"${line}")"
+          justification="$(sed -E 's|^/waive-review[[:space:]]+[a-z-]+[[:space:]]*:[[:space:]]*||' <<<"${line}")"
+
+          # A short, enumerable vocabulary. A countable set resists the decay
+          # that free text does not.
+          case "${category}" in
+            hotfix|linting-only|external-review) ;;
+            *)
+              echo "::error::unknown category '${category}'; expected hotfix, linting-only or external-review"
+              exit 1
+              ;;
+          esac
+
+          if [ "${#justification}" -lt 15 ]; then
+            echo "::error::the justification is too thin to be a record: '${justification}'"
+            exit 1
+          fi
+
+          echo "category=${category}" >>"${GITHUB_OUTPUT}"
+          echo "justification=${justification}" >>"${GITHUB_OUTPUT}"
+
+      - name: "The commenter is a code owner"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+        run: |
+          [ "${RUNNER_DEBUG}" == 1 ] && set -xv
+          set -euo pipefail
+
+          owners="$(grep -E '^\*[[:space:]]' .github/CODEOWNERS | sed -E 's|^\*[[:space:]]+||' || true)"
+          if [ -z "${owners}" ]; then
+            echo "::error::CODEOWNERS has no '*' entry; nobody can waive"
+            exit 1
+          fi
+
+          for owner in ${owners}; do
+            case "${owner}" in
+              @*/*)
+                team="${owner#@*/}"
+                if gh api "orgs/${GITHUB_REPOSITORY_OWNER}/teams/${team}/memberships/${COMMENTER}" \
+                    --jq '.state' 2>/dev/null | grep -qx active; then
+                  echo "::notice::${COMMENTER} waives as a member of ${owner}"
+                  exit 0
+                fi
+                ;;
+              @*)
+                if [ "${owner#@}" == "${COMMENTER}" ]; then
+                  echo "::notice::${COMMENTER} waives as a named owner"
+                  exit 0
+                fi
+                ;;
+            esac
+          done
+
+          echo "::error::${COMMENTER} is not a code owner; the waiver does not apply"
+          exit 1
+
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ secrets.CHANGELOG_BOT_APP_ID }}
+          private-key: ${{ secrets.CHANGELOG_BOT_PRIVATE_KEY }}
+
+      - name: "Enqueue on the code owner's authority"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR: ${{ github.event.issue.number }}
+          CATEGORY: ${{ steps.command.outputs.category }}
+          JUSTIFICATION: ${{ steps.command.outputs.justification }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+        run: |
+          [ "${RUNNER_DEBUG}" == 1 ] && set -xv
+          set -euo pipefail
+
+          id="$(gh api graphql -f query='
+            query($owner:String!, $name:String!, $number:Int!) {
+              repository(owner:$owner, name:$name) { pullRequest(number:$number) { id } }
+            }' -F owner="${GITHUB_REPOSITORY_OWNER}" \
+               -F name="${GITHUB_REPOSITORY#*/}" \
+               -F number="${PR}" --jq '.data.repository.pullRequest.id')"
+
+          # The observation this whole mechanism turns on: whether an App with
+          # bypass on the Review ruleset can *enqueue* a pull request that lacks
+          # an approval, or whether it can only merge directly and so skip the
+          # queue. Enqueueing is the answer that keeps the waiver honest.
+          if gh api graphql -f query="mutation{enqueuePullRequest(input:{pullRequestId:\"${id}\"}){mergeQueueEntry{position state}}}" >/tmp/enqueue.json 2>/tmp/enqueue.err; then
+            echo "::notice::enqueued on ${COMMENTER}'s waiver"
+            cat /tmp/enqueue.json
+          else
+            echo "::error::enqueue refused; the waiver cannot use the queue"
+            cat /tmp/enqueue.err
+            exit 1
+          fi
+
+          {
+            echo "# Review waived"
+            echo "| field | value |"
+            echo "|---|---|"
+            echo "| pull request | #${PR} |"
+            echo "| waived by | @${COMMENTER} |"
+            echo "| category | \`${CATEGORY}\` |"
+            echo "| justification | ${JUSTIFICATION} |"
+          } >>"${GITHUB_STEP_SUMMARY}"
