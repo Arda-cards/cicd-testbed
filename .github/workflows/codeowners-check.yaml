@@ -1,0 +1,61 @@
+---
+# Required status check. Fails when CODEOWNERS does not resolve.
+#
+# This exists because of how the review policy is built. With
+# `required_approving_review_count: 0` and `require_code_owner_review: true`,
+# CODEOWNERS *is* the review policy — and an unresolvable owner does not make
+# the rule stricter or even noisier. It makes it vacuous: the rule still claims
+# to require code-owner review, and the pull request merges with no review at
+# all.
+#
+# Measured on this repository, 2026-08-06. Same pull request, same two rulesets,
+# only the validity of CODEOWNERS differing:
+#
+#   team lacked repository access  ->  CLEAN, zero reviews, mergeable
+#   team granted push access       ->  BLOCKED, review requested
+#
+# Nothing on the pull request distinguishes those two states. A renamed team, a
+# repository created without granting access, or a typo turns review off and
+# says nothing. This check is what says it.
+name: codeowners-check
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened, synchronize]
+  merge_group:
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  codeowners-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: "Every owner resolves"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ "${RUNNER_DEBUG}" == 1 ] && set -xv
+          set -euo pipefail
+
+          errors="$(gh api "repos/${GITHUB_REPOSITORY}/codeowners/errors" --jq '.errors // []')"
+          count="$(jq 'length' <<<"${errors}")"
+
+          if [ "${count}" -eq 0 ]; then
+            echo "::notice::CODEOWNERS resolves"
+            exit 0
+          fi
+
+          echo "::error::CODEOWNERS has ${count} unresolved owner(s); code-owner review is not being enforced"
+          jq -r '.[] | "::error file=.github/CODEOWNERS,line=\(.line)::\(.message)"' <<<"${errors}"
+          {
+            echo "# CODEOWNERS does not resolve"
+            echo
+            echo "Code-owner review is silently not enforced while this is true."
+            echo
+            jq -r '.[] | "- line \(.line): \(.message)"' <<<"${errors}"
+          } >>"${GITHUB_STEP_SUMMARY}"
+          exit 1

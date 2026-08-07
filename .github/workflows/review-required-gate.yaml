@@ -1,0 +1,73 @@
+---
+# Required status check. Lets an author demand a human review on a change that
+# ownership rules alone would let through.
+#
+# Passes when the REVIEW-REQUIRED label is absent, and when it is present only
+# once a human has approved. A bot approval does not count: the label exists
+# precisely to put a person in the loop, and an automated approval would defeat
+# the one thing it is for.
+#
+# Not draft-gated, and it re-evaluates on merge_group, for the same reason
+# changelog-check does: a required check that skips reports success without
+# having evaluated anything.
+name: review-required-gate
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened, synchronize, labeled, unlabeled]
+  pull_request_review:
+    types: [submitted, dismissed]
+  merge_group:
+
+permissions: {}
+
+jobs:
+  review-required-gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: "Resolve the pull request"
+        id: pr
+        run: |
+          [ "${RUNNER_DEBUG}" == 1 ] && set -xv
+          set -euo pipefail
+
+          if [ "${GITHUB_EVENT_NAME}" == "merge_group" ]; then
+            number="$(sed -E 's|.*/pr-([0-9]+)-[0-9a-f]+$|\1|' <<<"${GITHUB_REF_NAME}")"
+          else
+            number="${{ github.event.pull_request.number }}"
+          fi
+
+          if ! [[ "${number}" =~ ^[0-9]+$ ]]; then
+            echo "::error::could not determine a pull-request number from ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+          echo "number=${number}" >>"${GITHUB_OUTPUT}"
+
+      - name: "A demanded review has actually happened"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.pr.outputs.number }}
+        run: |
+          [ "${RUNNER_DEBUG}" == 1 ] && set -xv
+          set -euo pipefail
+
+          if ! gh pr view "${PR}" --repo "${GITHUB_REPOSITORY}" --json labels \
+              --jq '.labels[].name' | grep -qx "REVIEW-REQUIRED"; then
+            echo "::notice::REVIEW-REQUIRED is not set; nothing to demand"
+            exit 0
+          fi
+
+          approvals="$(
+            gh pr view "${PR}" --repo "${GITHUB_REPOSITORY}" --json reviews \
+              --jq '[.reviews[] | select(.state == "APPROVED" and .author.is_bot == false)] | length'
+          )"
+
+          if [ "${approvals}" -eq 0 ]; then
+            echo "::error::REVIEW-REQUIRED is set and no human has approved"
+            exit 1
+          fi
+
+          echo "::notice::REVIEW-REQUIRED satisfied by ${approvals} human approval(s)"
