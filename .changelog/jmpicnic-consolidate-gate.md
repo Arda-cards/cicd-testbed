@@ -25,3 +25,11 @@
   implementation of the queued CI/CD model, not only a place to run experiments.
   It now inventories the model's parts and carries every finding measured so
   far, including four that were only in the project's design document.
+
+- The gate checks CODEOWNERS on the ref under test rather than on the default
+  branch. Querying the default branch means a repository adopting the model
+  404s on the very pull request that installs the file, and a pull request that
+  breaks or deletes CODEOWNERS is caught only after it has merged.
+- `changelog-entry.sh` reports its refusals on stderr. Every caller reads the
+  entry through command substitution, so a message on stdout was captured as if
+  it were the entry and the author was left with a bare exit code.

@@ -52,10 +52,15 @@ jobs:
           echo "::notice::checking pull request #${number}"
           echo "number=${number}" >>"${GITHUB_OUTPUT}"
 
+      # Against the ref under test, not the default branch: a pull request that
+      # breaks CODEOWNERS should fail here rather than after it has merged, and
+      # the pull request that first installs the file has nothing on main to
+      # check.
       - name: "Every code owner resolves"
         env:
           GH_TOKEN: ${{ github.token }}
-        run: .github/scripts/check-codeowners.sh
+          REF: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: .github/scripts/check-codeowners.sh "${REF}"
 
       - name: "Not a draft, and not marked as a feature build"
         env:

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Fails when CODEOWNERS does not resolve.
+# Fails when CODEOWNERS is missing or does not resolve.
 #
 # With `required_approving_review_count: 0` and `require_code_owner_review:
 # true`, CODEOWNERS *is* the review policy — and an unresolvable owner does not
@@ -16,17 +16,43 @@
 #
 # Nothing on the pull request distinguishes those. A renamed team, a permission
 # change, or a typo turns review off and says nothing. This is what says it.
+#
+# The check runs against the ref under test rather than the default branch, so
+# it catches a pull request that breaks or deletes the file before that becomes
+# everyone's problem. It is also what lets the adopting pull request pass: the
+# repository has no CODEOWNERS on `main` until this very change merges.
+#
+# Usage: check-codeowners.sh [ref]
 
 [ "${RUNNER_DEBUG}" == 1 ] && set -xv
 set -euo pipefail
 
-errors="$(gh api "repos/${GITHUB_REPOSITORY}/codeowners/errors" --jq '.errors // []')"
+readonly ref="${1:-}"
+
+query="repos/${GITHUB_REPOSITORY}/codeowners/errors"
+if [ -n "${ref}" ]; then
+  query+="?ref=${ref}"
+fi
+readonly query
+
+# A 404 here is not "no errors" — it is "no CODEOWNERS file", which is the
+# strongest form of the failure this script exists to report.
+if ! response="$(gh api "${query}" 2>&1)"; then
+  if grep -q "Not Found" <<<"${response}"; then
+    echo "::error file=.github/CODEOWNERS::no CODEOWNERS file on ${ref:-the default branch}; code-owner review is not being enforced"
+  else
+    echo "::error::could not read CODEOWNERS errors: ${response}"
+  fi
+  exit 1
+fi
+
+errors="$(jq -c '.errors // []' <<<"${response}")"
 readonly errors
 count="$(jq 'length' <<<"${errors}")"
 readonly count
 
 if [ "${count}" -eq 0 ]; then
-  echo "::notice::CODEOWNERS resolves"
+  echo "::notice::CODEOWNERS resolves on ${ref:-the default branch}"
   exit 0
 fi
 
