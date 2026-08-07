@@ -1,0 +1,62 @@
+---
+# Exercises Arda-cards/qualify-build-action against every event it claims to
+# support, and reports what it decided.
+#
+# The point is to test the action itself without a release. `operations` cannot
+# reference an unreleased version from `main`, but this repository can reference
+# a work branch freely — so a change to the action can be observed under a real
+# merge queue before it is published to the seven repositories that consume it.
+#
+# `workflow_name` is set to a check this repository's ruleset actually requires,
+# since that is what `define-target` probes for. Consumers pass `context:build`.
+name: qualify
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened, synchronize]
+  merge_group:
+  push:
+
+permissions: {}
+
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - id: qualify-build
+        uses: Arda-cards/qualify-build-action@jmpicnic/pr-body-changelog
+        with:
+          workflow_name: "context"
+      - name: "Report the classification"
+        env:
+          KIND: ${{ steps.qualify-build.outputs.kind }}
+          TAG: ${{ steps.qualify-build.outputs.tag }}
+          TARGET: ${{ steps.qualify-build.outputs.target }}
+          TRIGGER: ${{ steps.qualify-build.outputs.trigger }}
+          VERSION: ${{ steps.qualify-build.outputs.version }}
+        run: |
+          [ "${RUNNER_DEBUG}" == 1 ] && set -xv
+          set -u
+
+          {
+            echo "# qualify on ${GITHUB_EVENT_NAME}"
+            echo '| output | value |'
+            echo '|---|---|'
+            echo "| trigger | \`${TRIGGER:-<empty>}\` |"
+            echo "| target | \`${TARGET:-<empty>}\` |"
+            echo "| kind | \`${KIND:-<empty>}\` |"
+            echo "| version | \`${VERSION:-<empty>}\` |"
+            echo "| tag | \`${TAG:-<empty>}\` |"
+          } >/tmp/qualify.md
+
+          tee -a "${GITHUB_STEP_SUMMARY}" </tmp/qualify.md
+
+          # A queued build must never be a publish build: the queue gates a
+          # merge, it does not release. Fail loudly if that ever stops holding.
+          if [ "${GITHUB_EVENT_NAME}" == "merge_group" ] && [ "${KIND}" != "test" ]; then
+            echo "::error::a merge_group build reported kind=${KIND}, expected test"
+            exit 1
+          fi
