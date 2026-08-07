@@ -17,6 +17,24 @@ Categories, defined in [changemap.json](.github/clq/changemap.json):
   - `Fixed` for any bugfixes.
   - `Security` in case of vulnerabilities.
 
+## [1.2.0] - 2026-08-07
+
+### Added
+
+- The full queued-CI/CD machinery, so the design can be exercised without
+  `operations`: a `changelog-check` gate enforcing one entry by exactly one
+  route, range-based assembly that composes every pending merge into a single
+  release, and a synthetic build that refuses to publish from anything but an
+  assembly commit.
+
+### Fixed
+
+- Assembly now bounds its range by the last release tag rather than by the last
+  assembly commit. A repository adopting the model has no assembly commit, so
+  the previous reading made the first range the entire history — including
+  merges that predate the model and carry no entry to collect. The first run in
+  this repository failed exactly that way. In steady state the two readings
+  agree, because assembly is what creates the tag.
 ## [1.1.0] - 2026-08-07
 
 ### Added
