@@ -17,6 +17,32 @@ Categories, defined in [changemap.json](.github/clq/changemap.json):
   - `Fixed` for any bugfixes.
   - `Security` in case of vulnerabilities.
 
+## [3.0.0] - 2026-08-07
+
+### Changed
+
+- CODEOWNERS covers every path again. Scoping it to `/.github/` existed only to
+  leave room for a waivable general-review gate; with no waiver, owning
+  everything is both simpler and stricter, and it closes the hole that a pull
+  request can rewrite the gate that is gating it.
+
+### Removed
+
+- The `/waive-review` command and the `review-required-gate` check. The waiver
+  could not work: `enqueuePullRequest` refuses a pull request awaiting
+  code-owner review regardless of who asks, and a bypass actor cannot merge
+  directly either because the merge-queue rule belongs to a ruleset it does not
+  bypass. Both were measured rather than inferred. Without a waiver there is no
+  reason to split the rulesets, no bypass identity to create, and no need for a
+  label demanding a human where code-owner review already demands one.
+
+### Fixed
+
+- `qualify` tracks the released `qualify-build-action@v2` again. It was left
+  pinned to the `jmpicnic/pr-body-changelog` work branch, which was deleted when
+  that work merged, so every queued entry failed to resolve the action and was
+  dropped from the queue.
+
 ## [2.0.1] - 2026-08-07
 
 ### Fixed
