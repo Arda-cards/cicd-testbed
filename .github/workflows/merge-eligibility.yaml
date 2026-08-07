@@ -1,0 +1,70 @@
+---
+# The required status check. Establishes everything that must be true before a
+# pull request may merge, in one place.
+#
+# One workflow rather than one per assertion. They share a trigger that must
+# not drift, and the merge-queue pull-request resolution that every one of them
+# needs — duplicating that across files is how a gate quietly stops evaluating
+# queued entries while still reporting success. It is also one required check
+# name in the ruleset instead of several, and one runner instead of several for
+# a few seconds of work each.
+#
+# Deliberately NOT draft-gated, and it re-evaluates on merge_group rather than
+# auto-passing. A required check that skips reports success without having
+# evaluated anything, which is indistinguishable from passing — the reference
+# implementations carry that hole today.
+name: merge-eligibility
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened, synchronize, labeled, unlabeled, converted_to_draft]
+  merge_group:
+
+permissions: {}
+
+jobs:
+  merge-eligibility:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: "Resolve the pull request"
+        id: pr
+        run: |
+          [ "${RUNNER_DEBUG}" == 1 ] && set -xv
+          set -euo pipefail
+
+          # A queued entry names its pull request in the merge-group head ref:
+          #   gh-readonly-queue/main/pr-7-<sha>
+          if [ "${GITHUB_EVENT_NAME}" == "merge_group" ]; then
+            number="$(sed -E 's|.*/pr-([0-9]+)-[0-9a-f]+$|\1|' <<<"${GITHUB_REF_NAME}")"
+          else
+            number="${{ github.event.pull_request.number }}"
+          fi
+
+          if ! [[ "${number}" =~ ^[0-9]+$ ]]; then
+            echo "::error::could not determine a pull-request number from ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+          echo "::notice::checking pull request #${number}"
+          echo "number=${number}" >>"${GITHUB_OUTPUT}"
+
+      - name: "Every code owner resolves"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/check-codeowners.sh
+
+      - name: "Not a draft, and not marked as a feature build"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.pr.outputs.number }}
+        run: .github/scripts/check-mergeable.sh "${PR}"
+
+      - name: "Exactly one changelog entry, and it is valid"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.pr.outputs.number }}
+        run: .github/scripts/check-changelog.sh "${PR}"
