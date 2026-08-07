@@ -17,6 +17,13 @@ Categories, defined in [changemap.json](.github/clq/changemap.json):
   - `Fixed` for any bugfixes.
   - `Security` in case of vulnerabilities.
 
+## [2.0.1] - 2026-08-07
+
+### Fixed
+
+- Nothing; a pull request touching no owned path, used to check that ordinary
+  changes can still reach the queue under scoped ownership.
+
 ## [2.0.0] - 2026-08-07
 
 ### Changed
