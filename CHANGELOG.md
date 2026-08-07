@@ -17,6 +17,13 @@ Categories, defined in [changemap.json](.github/clq/changemap.json):
   - `Fixed` for any bugfixes.
   - `Security` in case of vulnerabilities.
 
+## [1.1.0] - 2026-08-07
+
+### Added
+
+- Exercise `qualify-build-action` against every event it supports, so a change
+  to it can be observed under a real merge queue before it is released.
+
 ## [1.0.0] - 2026-08-06
 
 ### Added
