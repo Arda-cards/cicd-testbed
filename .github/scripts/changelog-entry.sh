@@ -19,8 +19,10 @@ set -euo pipefail
 readonly pr="${1:?usage: changelog-entry.sh <pr-number>}"
 readonly changelog_dir=".changelog"
 
+# stderr, not stdout: every caller reads the entry through command substitution,
+# which would capture the diagnosis and leave the author a bare exit code.
 fail() {
-  echo "::error::${1}"
+  echo "::error::${1}" >&2
   exit 1
 }
 

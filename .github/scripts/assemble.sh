@@ -142,8 +142,9 @@ if ! clq "${changelog}" -release >/dev/null; then
 fi
 echo "::notice::assembled ${next} from ${prs[*]}"
 
-# The pending entries are consumed, not archived: main never carries a
-# .changelog file, so a stale one can never be assembled twice.
+# The pending entries are consumed, not archived: main does not keep a
+# .changelog file, so a stale one can never be assembled twice. The merge
+# commit carries it until this commit removes it.
 if compgen -G "${changelog_dir}/*.md" >/dev/null; then
   find "${changelog_dir}" -name '*.md' ! -name 'README.md' -delete
 fi
@@ -154,7 +155,27 @@ git add "${changelog}" "${changelog_dir}"
 git commit -m "${assembly_prefix}${next}
 
 Covers ${prs[*]}."
-git push origin HEAD:main
+# main can advance while this runs — a merge landing between the checkout and
+# the push makes it a non-fast-forward. Rebase onto whatever arrived and try
+# again rather than leaving the release unwritten. Concurrency serialises
+# assembly runs, so the only thing that can have moved is a merge, and rebasing
+# a changelog prepend over one is what git is good at.
+for attempt in 1 2 3; do
+  if git push origin HEAD:main; then
+    break
+  fi
+  if [ "${attempt}" -eq 3 ]; then
+    echo "::error::main moved under this assembly three times; the entries stay pending for the next run"
+    exit 1
+  fi
+  echo "::warning::main advanced; rebasing and retrying (attempt ${attempt})"
+  git fetch origin main
+  if ! git rebase origin/main; then
+    git rebase --abort || true
+    echo "::error::could not rebase the assembly onto main; the entries stay pending for the next run"
+    exit 1
+  fi
+done
 
 git tag -a "v${next}" -m "Release ${next}"
 git push origin "v${next}"

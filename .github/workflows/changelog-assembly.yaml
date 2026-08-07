@@ -42,6 +42,14 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
+      # CODEOWNERS can break after a merge — a team renamed, access revoked —
+      # and the pre-merge gate cannot see that. This is the same assertion at
+      # the only other moment it can be made.
+      - name: "Every code owner still resolves"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: .github/scripts/check-codeowners.sh
+
       - name: "Assemble every pending merge into one release"
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
