@@ -1,0 +1,54 @@
+---
+# Required status check. Fails when a queued pull request is a draft.
+#
+# GitHub does not do this for you. Measured on this repository, 2026-08-06:
+# a queued pull request converted back to draft stayed in the queue at
+# position 1, every check ran against the queued commit, and it **merged** —
+# `isDraft: true`, `state: MERGED`. Assembly then cut a release from it.
+#
+# So "the queue never merges a draft" is not a platform guarantee; it is
+# something a repository has to assert. This is the assertion.
+#
+# Failing is also the mechanism, not just the report. GitHub will not eject a
+# queued entry when it is drafted, but it does eject one whose required checks
+# fail — so a failing check here is what actually removes it from the queue.
+name: draft-check
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened, synchronize, converted_to_draft]
+  merge_group:
+
+permissions: {}
+
+jobs:
+  draft-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: "A queued pull request is not a draft"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ "${RUNNER_DEBUG}" == 1 ] && set -xv
+          set -euo pipefail
+
+          if [ "${GITHUB_EVENT_NAME}" == "merge_group" ]; then
+            number="$(sed -E 's|.*/pr-([0-9]+)-[0-9a-f]+$|\1|' <<<"${GITHUB_REF_NAME}")"
+          else
+            number="${{ github.event.pull_request.number }}"
+          fi
+
+          if ! [[ "${number}" =~ ^[0-9]+$ ]]; then
+            echo "::error::could not determine a pull-request number from ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+
+          if [ "$(gh pr view "${number}" --repo "${GITHUB_REPOSITORY}" --json isDraft --jq '.isDraft')" == "true" ]; then
+            echo "::error::#${number} is a draft; it must not merge"
+            exit 1
+          fi
+
+          echo "::notice::#${number} is not a draft"
