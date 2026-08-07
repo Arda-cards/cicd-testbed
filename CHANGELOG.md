@@ -17,6 +17,30 @@ Categories, defined in [changemap.json](.github/clq/changemap.json):
   - `Fixed` for any bugfixes.
   - `Security` in case of vulnerabilities.
 
+## [1.3.0] - 2026-08-07
+
+### Added
+
+- A `draft-check` gate that fails when a queued pull request is a draft, and
+  restores the gate delay to zero. GitHub does not enforce this: a queued pull
+  request converted back to draft was measured staying in the queue, running
+  every check, and merging — `isDraft: true`, `state: MERGED`, with a release
+  cut from it. Failing a required check is also the eviction mechanism, since
+  the queue will not eject a drafted entry but does eject one whose checks fail.
+- A `review-required-gate` check, so an author can demand a human review on a
+  change that ownership rules alone would let through. It passes when the
+  `REVIEW-REQUIRED` label is absent, and when present only once a human has
+  approved — a bot approval does not count, since the label exists precisely to
+  put a person in the loop.
+- A `codeowners-check` gate that fails when CODEOWNERS does not resolve. With
+  `required_approving_review_count: 0` and `require_code_owner_review: true`,
+  an unresolvable owner does not make the rule stricter — it makes it vacuous,
+  and the pull request merges with no review while the ruleset still claims to
+  require one. Measured here: the same pull request under the same rulesets was
+  mergeable with zero reviews when the owning team lacked repository access, and
+  blocked once it was granted. Nothing distinguished those two states on the
+  pull request itself.
+
 ## [1.2.2] - 2026-08-07
 
 ### Fixed
