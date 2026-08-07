@@ -14,3 +14,10 @@
   leave room for a waivable general-review gate; with no waiver, owning
   everything is both simpler and stricter, and it closes the hole that a pull
   request can rewrite the gate that is gating it.
+
+### Fixed
+
+- `qualify` tracks the released `qualify-build-action@v2` again. It was left
+  pinned to the `jmpicnic/pr-body-changelog` work branch, which was deleted when
+  that work merged, so every queued entry failed to resolve the action and was
+  dropped from the queue.

@@ -7,6 +7,11 @@
 # a work branch freely — so a change to the action can be observed under a real
 # merge queue before it is published to the seven repositories that consume it.
 #
+# Between experiments it tracks the released `@v2`, which is what the consumers
+# resolve to. A work branch pinned here outlives the branch: this workflow was
+# left on `jmpicnic/pr-body-changelog` after that branch merged and was deleted,
+# and every queued entry failed to resolve the action until it was put back.
+#
 # `workflow_name` is set to a check this repository's ruleset actually requires,
 # since that is what `define-target` probes for. Consumers pass `context:build`.
 name: qualify
@@ -27,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - id: qualify-build
-        uses: Arda-cards/qualify-build-action@jmpicnic/pr-body-changelog
+        uses: Arda-cards/qualify-build-action@v2
         with:
           # This repository composes its changelog after merge, so a pull
           # request introduces no new version and clq-action's "exactly one new
