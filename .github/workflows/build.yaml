@@ -1,0 +1,81 @@
+---
+# A synthetic stand-in for the real build, whose only job is to prove the
+# ordering this project inverts.
+#
+# In `operations`, `common-module` and `infrastructure`, CHANGELOG.md *is* the
+# build-time version source — the version, tag, image tag, chart version and
+# Maven coordinates are all derived from it. So the changelog has to be composed
+# *before* the build, the reverse of the reference model where the build runs
+# first and assembly follows.
+#
+# This build therefore refuses to publish unless it is standing on an assembly
+# commit. That single assertion is the thing worth proving cheaply.
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, ready_for_review, reopened, synchronize]
+  merge_group:
+
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: "Derive the version from the changelog"
+        id: version
+        run: |
+          [ "${RUNNER_DEBUG}" == 1 ] && set -xv
+          set -euo pipefail
+
+          version="$(docker run --rm \
+            --volume "${PWD}/CHANGELOG.md:/home/CHANGELOG.md:ro" \
+            --volume "${PWD}/.github/clq/changemap.json:/home/changemap.json:ro" \
+            denisa/clq:1.8.28 -changeMap /home/changemap.json \
+            -query 'releases[0].version' /home/CHANGELOG.md)"
+
+          echo "::notice::version is ${version}"
+          echo "version=${version}" >>"${GITHUB_OUTPUT}"
+
+      - name: "Publish, but only from an assembly commit"
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          [ "${RUNNER_DEBUG}" == 1 ] && set -xv
+          set -euo pipefail
+
+          subject="$(git log -1 --format=%s)"
+
+          if [ "${GITHUB_EVENT_NAME}" != "push" ]; then
+            echo "::notice::${GITHUB_EVENT_NAME} build: test only, nothing published"
+            exit 0
+          fi
+
+          if [[ "${subject}" != "chore: assemble CHANGELOG "* ]]; then
+            echo "::notice::not an assembly commit; nothing to publish"
+            exit 0
+          fi
+
+          # The assertion this workflow exists for: the version the build would
+          # publish must be the one assembly just wrote. If publishing could fire
+          # on the merge commit instead, it would derive the *previous* version
+          # and ship the wrong artifact under the right name.
+          assembled="${subject#chore: assemble CHANGELOG }"
+          if [ "${VERSION}" != "${assembled}" ]; then
+            echo "::error::build derived ${VERSION} but assembly wrote ${assembled}"
+            exit 1
+          fi
+
+          echo "::notice::publishing ${VERSION}"
+          {
+            echo "# published"
+            echo "- version: \`${VERSION}\`"
+            echo "- commit: \`${GITHUB_SHA}\`"
+          } >>"${GITHUB_STEP_SUMMARY}"

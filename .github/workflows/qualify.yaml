@@ -29,6 +29,12 @@ jobs:
       - id: qualify-build
         uses: Arda-cards/qualify-build-action@jmpicnic/pr-body-changelog
         with:
+          # This repository composes its changelog after merge, so a pull
+          # request introduces no new version and clq-action's "exactly one new
+          # version" check would reject every one of them. The guarantee is not
+          # lost: changelog-check refuses any edit to CHANGELOG.md at all, which
+          # is stricter than allowing exactly one.
+          validate_against_base: "false"
           workflow_name: "context"
       - name: "Report the classification"
         env:
