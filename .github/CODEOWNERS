@@ -1,1 +1,4 @@
-* @Arda-cards/engineering
+# Only the machinery that enforces policy is owned. Everything else is
+# governed by the waivable review gate; this path is deliberately not, so the
+# rules can only be changed by the process the rules describe.
+/.github/ @Arda-cards/engineering
