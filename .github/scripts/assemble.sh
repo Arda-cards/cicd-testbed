@@ -26,10 +26,16 @@ clq() {
 
 # --- the range ---------------------------------------------------------------
 
-# The previous assembly commit bounds the range. With none, everything on the
-# branch is pending, which is the correct reading for a repository adopting the
-# model for the first time.
-previous="$(git log --format='%H %s' | awk -v p="${assembly_prefix}" 'index($0, p) == 41 { print $1; exit }')"
+# The last release tag bounds the range: everything published is behind it,
+# everything pending is ahead. In steady state that is the previous assembly,
+# because assembly is what creates the tag.
+#
+# It is deliberately not "the previous assembly commit". A repository adopting
+# this model has no assembly commit, so that reading makes the first range the
+# entire history — including merges that predate the model and have no entry to
+# collect. The last hand-made release tag is exactly the right boundary on the
+# first run and stays right on every run after it.
+previous="$(git describe --tags --abbrev=0 2>/dev/null || true)"
 
 if [ -n "${previous}" ]; then
   readonly range="${previous}..HEAD"
