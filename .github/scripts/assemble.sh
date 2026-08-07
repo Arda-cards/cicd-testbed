@@ -105,6 +105,11 @@ work="$(mktemp -d)"
   echo "## [0.0.0] - $(git log -1 --format=%cs HEAD)"
   echo
   printf '%s\n' "${merged}"
+  # Command substitution strips trailing newlines, so the blank line that
+  # separates this block from the release below it has to be put back. Without
+  # it the composed entry runs straight into the next `## [` heading — valid
+  # enough for clq to accept, and wrong in a file people read.
+  echo
   tail -n +"$(grep -n '^## \[' "${changelog}" | head -1 | cut -d: -f1)" "${changelog}"
 } >"${work}/candidate.md"
 
