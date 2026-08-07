@@ -17,6 +17,16 @@ Categories, defined in [changemap.json](.github/clq/changemap.json):
   - `Fixed` for any bugfixes.
   - `Security` in case of vulnerabilities.
 
+## [1.2.1] - 2026-08-07
+
+### Fixed
+
+- An assembled release block is now separated from the release below it by a
+  blank line. Command substitution strips trailing newlines, so the block ran
+  straight into the next `## [` heading — which `clq` accepts and a reader does
+  not. `CHANGELOG.md` is a published artifact; a formatting artifact of how it
+  was composed does not belong in it.
+
 ## [1.2.0] - 2026-08-07
 
 ### Added
