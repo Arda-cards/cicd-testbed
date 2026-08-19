@@ -38,12 +38,6 @@ jobs:
         with:
           app-id: ${{ secrets.CHANGELOG_BOT_APP_ID }}
           private-key: ${{ secrets.CHANGELOG_BOT_PRIVATE_KEY }}
-          # Scoped to both repositories. The default is this one alone, and the
-          # resolver below lives in the other.
-          owner: ${{ github.repository_owner }}
-          repositories: |
-            cicd-testbed
-            synthesize-changelog-entry
 
       - uses: actions/checkout@v7
         with:
@@ -59,7 +53,6 @@ jobs:
           repository: Arda-cards/synthesize-changelog-entry
           ref: 4098b4f8688bbf67bc743fd2286bd68b9d47809f
           path: .synthesize
-          token: ${{ steps.app-token.outputs.token }}
 
       # CODEOWNERS can break after a merge — a team renamed, access revoked —
       # and the pre-merge gate cannot see that. This is the same assertion at
