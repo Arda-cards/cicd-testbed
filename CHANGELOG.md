@@ -17,6 +17,12 @@ Categories, defined in [changemap.json](.github/clq/changemap.json):
   - `Fixed` for any bugfixes.
   - `Security` in case of vulnerabilities.
 
+## [99.0.0] - 2026-08-19
+
+### Fixed
+
+- T6 edits CHANGELOG.md by hand, which assembly owns.
+
 ## [4.0.0] - 2026-08-07
 
 ### Changed
