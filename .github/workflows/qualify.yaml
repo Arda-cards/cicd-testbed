@@ -42,7 +42,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
       - id: qualify-build
         # TEMPORARY PIN — qualify-build-action#9, unreleased. Pinned by commit so
-        # the shape can be exercised here before it is published to the ten
+        # the shape can be exercised here before it is published to the
         # repositories that consume this action. Becomes @v2.2.0 once released.
         uses: Arda-cards/qualify-build-action@eab7dfae436c0a15a176eaf3c7c6b2947a07d3da
         with:
