@@ -17,6 +17,14 @@ Categories, defined in [changemap.json](.github/clq/changemap.json):
   - `Fixed` for any bugfixes.
   - `Security` in case of vulnerabilities.
 
+## [4.2.1] - 2026-08-19
+
+### Fixed
+
+- The build qualification is told that "no feature-build marker" is an answer rather than an absence, so an unmarked branch no longer falls through to a derivation that rejects any changelog directory holding more than one entry file. A merge group batching two pull requests stages exactly that, so every batch failed.
+> [!note]
+> Authored by Claude Opus 5 for jmpicnic
+
 ## [4.2.0] - 2026-08-19
 
 ### Added
