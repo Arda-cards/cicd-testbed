@@ -41,7 +41,7 @@ jobs:
       # about whether a branch is marked, which is what used to happen.
       - id: changelog
         name: "Resolve the changelog manifest"
-        uses: Arda-cards/synthesize-changelog-entry@dcb81efd50a49df15853aaeea3121dc1f6425a70
+        uses: Arda-cards/synthesize-changelog-entry@v1.1.0
         with:
           # A build wants to know whether there is a marker. A branch with
           # nothing to say is an ordinary build, not an error.

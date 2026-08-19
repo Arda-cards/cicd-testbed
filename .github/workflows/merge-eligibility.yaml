@@ -71,7 +71,7 @@ jobs:
       # deriving its own.
       - id: changelog
         name: "Resolve the changelog manifest"
-        uses: Arda-cards/synthesize-changelog-entry@dcb81efd50a49df15853aaeea3121dc1f6425a70
+        uses: Arda-cards/synthesize-changelog-entry@v1.1.0
         with:
           pr: ${{ steps.pr.outputs.number }}
         env:
