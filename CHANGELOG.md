@@ -17,6 +17,20 @@ Categories, defined in [changemap.json](.github/clq/changemap.json):
   - `Fixed` for any bugfixes.
   - `Security` in case of vulnerabilities.
 
+## [4.1.0] - 2026-08-19
+
+### Added
+
+- The build resolves the feature-build marker from the changelog manifest and publishes a prerelease that reaches `dev` alone, so a marked branch cannot reach a further environment by omission.
+
+### Fixed
+
+- The changelog manifest is resolved by one component and consumed by the merge gate, the build and the assembly, rather than parsed independently by each of them. A marker written in a pull-request body is now read and honoured instead of being ignored by everything that needed it.
+- A branch is ambiguous when it carries more than one feature-build marker, not when it carries more than one changelog file. Counting files failed the build whenever a merge batch staged two entries together, with nothing wrong with either.
+- Assembly writes `CHANGELOG.md` and stops, leaving the tag and the Release to the build that derives the version from it. It also bounds its range on its own previous commit rather than on the last release tag, so a build failing after a successful assembly cannot make the next run collect entries twice.
+> [!note]
+> Authored by Claude Opus 5 for jmpicnic
+
 ## [4.0.0] - 2026-08-07
 
 ### Changed
