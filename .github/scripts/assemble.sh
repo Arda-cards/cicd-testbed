@@ -38,7 +38,11 @@ clq() {
 
 readonly resolved="${ENTRIES:?ENTRIES must be set by the resolver}"
 
-mapfile -t prs < <(jq -r '.[] | "#" + .pr' <<<"${resolved}")
+# `tostring` is not redundant defensiveness about today's producer, which emits
+# `pr` as a string. It is that assembly runs only *after* merge, on main: a
+# resolver that one day emitted a number would break composition at the one
+# moment when the remedy is a commit on main rather than a failing check.
+mapfile -t prs < <(jq -r '.[] | "#" + (.pr|tostring)' <<<"${resolved}")
 if [ "${#prs[@]}" -eq 0 ]; then
   echo "::notice::no entries to assemble"
   exit 0
