@@ -44,15 +44,6 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
-      # synthesize-changelog-entry is a composite action, but assembly needs it
-      # once per merged pull request rather than once per job — a `uses:` step
-      # cannot loop. So the component is checked out and the script the action
-      # wraps is called directly. Same code, same rules, called differently.
-      - uses: actions/checkout@v7
-        with:
-          repository: Arda-cards/synthesize-changelog-entry
-          ref: dcb81efd50a49df15853aaeea3121dc1f6425a70
-          path: .synthesize
 
       # CODEOWNERS can break after a merge — a team renamed, access revoked —
       # and the pre-merge gate cannot see that. This is the same assertion at
@@ -62,7 +53,26 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: .github/scripts/check-codeowners.sh
 
-      - name: "Assemble every pending merge into one release"
+      - name: "Which merges are still pending"
+        id: pending
+        run: .github/scripts/pending-prs.sh
+
+      # The resolver takes the list and returns one manifest per pull request.
+      # Assembly used to check this component out and call the script the action
+      # wraps, around a loop of its own — borrowing an implementation rather than
+      # using an interface.
+      - id: changelog
+        name: "Resolve every pending manifest"
+        if: steps.pending.outputs.count != '0'
+        uses: Arda-cards/synthesize-changelog-entry@v1.1.0
+        with:
+          prs: ${{ steps.pending.outputs.prs }}
         env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: "Compose one release from them"
+        if: steps.pending.outputs.count != '0'
+        env:
+          ENTRIES: ${{ steps.changelog.outputs.entries }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: .github/scripts/assemble.sh

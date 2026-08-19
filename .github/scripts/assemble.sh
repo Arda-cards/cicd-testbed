@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 #
-# Composes one release block from every merge since the previous assembly and
-# commits it. It does not tag and does not create a Release.
+# Composes one release block from the entries it is given, and commits it. It
+# does not tag and it does not create a Release.
+#
+# It neither discovers the pending pull requests nor resolves their manifests.
+# `pending-prs.sh` names them and `synthesize-changelog-entry` resolves them, so
+# what arrives here is ENTRIES and what happens here is composition. Borrowing
+# another component's implementation — checking the resolver out and calling the
+# script its action wraps — is what that arrangement replaced.
 #
 # In this model CHANGELOG.md *is* the build-time version source, so the build
 # derives the version, cuts the tag and publishes. Assembly writing the file and
@@ -9,11 +15,9 @@
 # on 2026-08-18, assembly tagged v8.0.0 and the build then failed on the tag it
 # could not create, leaving a published Release with no artifact behind it.
 #
-# The range is the point. Taking "every merge since the last assembly commit"
-# rather than "the merge that triggered this run" means a failed run loses
-# nothing: its entries are still pending, and the next run collects them. It
-# also means a batch of pull requests merged together produces one release
-# rather than racing to produce several.
+# A batch of pull requests merged together therefore produces one release rather
+# than racing to produce several. The range that makes that true, and makes a
+# failed run lose nothing, is `pending-prs.sh`'s business now.
 
 [ "${RUNNER_DEBUG}" == 1 ] && set -xv
 set -euo pipefail
@@ -23,34 +27,6 @@ readonly changemap=".github/clq/changemap.json"
 readonly changelog_dir=".changelog"
 readonly assembly_prefix="chore: assemble CHANGELOG "
 
-# Reads one value out of a GITHUB_OUTPUT-format file, plain or heredoc-quoted.
-# Written generically so it does not depend on which delimiter the producer
-# chose.
-read_output() {
-  awk -v key="$2" '
-    $0 ~ "^" key "<<"            { delim = substr($0, length(key) + 3); inside = 1; next }
-    inside && $0 == delim        { inside = 0; next }
-    inside                       { print; next }
-    index($0, key "=") == 1      { print substr($0, length(key) + 2) }
-  ' "$1"
-}
-
-# synthesize-changelog-entry is a composite action, but assembly needs it once
-# per merged pull request rather than once per job, so it calls the script the
-# action wraps. The workflow checks the component out at .synthesize/.
-resolve_entry() {
-  local out
-  out="$(mktemp)"
-  # A range can cover many merges, so the file goes when the function does
-  # rather than accumulating one per pull request.
-  trap 'rm -f "${out}"' RETURN
-  if ! GITHUB_OUTPUT="${out}" PR="${1}" CHANGELOG_DIR="${changelog_dir}" REQUIRE_ENTRY=true \
-      .synthesize/synthesize.sh >&2; then
-    return 1
-  fi
-  read_output "${out}" entry
-}
-
 clq() {
   docker run --rm \
     --volume "${PWD}/${1}:/home/CHANGELOG.md:ro" \
@@ -58,60 +34,22 @@ clq() {
     denisa/clq:1.8.28 -changeMap /home/changemap.json "${@:2}" /home/CHANGELOG.md
 }
 
-# --- the range ---------------------------------------------------------------
+# --- the entries, as resolved for us ------------------------------------------
 
-# Assembly's own previous commit bounds the range. The tag was the right
-# boundary only while assembly was what created it; now that the build owns
-# tagging, a build failing after a successful assembly leaves no tag, and the
-# next run would reach back over merges it had already covered — collecting an
-# entry twice where the pull request used the body route, and failing outright
-# where it used the file route and the file was already consumed.
-#
-# --first-parent keeps this on the mainline: a plain --grep walks every
-# reachable commit, including assembly commits on branches that were merged in.
-previous="$(git log --first-parent --format='%H' --grep="^${assembly_prefix}" --max-count=1 HEAD 2>/dev/null || true)"
+readonly resolved="${ENTRIES:?ENTRIES must be set by the resolver}"
 
-# The tag remains the fallback, and that is what keeps the first run correct: a
-# repository adopting this model has no assembly commit yet, so without it the
-# first range would be the entire history — including merges that predate the
-# model and have no entry to collect.
-if [ -z "${previous}" ]; then
-  previous="$(git describe --tags --abbrev=0 2>/dev/null || true)"
-fi
-
-if [ -n "${previous}" ]; then
-  readonly range="${previous}..HEAD"
-else
-  readonly range="HEAD"
-fi
-echo "::notice::assembling range ${range}"
-
-mapfile -t merges < <(git log --merges --format='%H' "${range}")
-
-if [ "${#merges[@]}" -eq 0 ]; then
-  echo "::notice::no merges pending; nothing to assemble"
+# `tostring` is not redundant defensiveness about today's producer, which emits
+# `pr` as a string. It is that assembly runs only *after* merge, on main: a
+# resolver that one day emitted a number would break composition at the one
+# moment when the remedy is a commit on main rather than a failing check.
+mapfile -t prs < <(jq -r '.[] | "#" + (.pr|tostring)' <<<"${resolved}")
+if [ "${#prs[@]}" -eq 0 ]; then
+  echo "::notice::no entries to assemble"
   exit 0
 fi
+echo "::notice::composing ${prs[*]}"
 
-# --- collect one entry per merged pull request -------------------------------
-
-entries=''
-prs=()
-for merge in "${merges[@]}"; do
-  pr="$(git log -1 --format='%s' "${merge}" | sed -nE 's|^Merge pull request #([0-9]+) from .*|\1|p')"
-  if [ -z "${pr}" ]; then
-    echo "::warning::${merge} is a merge commit with no pull-request number in its subject; skipped"
-    continue
-  fi
-
-  echo "::notice::collecting #${pr}"
-  if ! entry="$(resolve_entry "${pr}")"; then
-    echo "::error::#${pr} has no resolvable changelog entry; it should not have merged"
-    exit 1
-  fi
-  entries+="${entry}"$'\n'
-  prs+=("#${pr}")
-done
+entries="$(jq -r '.[].entry' <<<"${resolved}")"
 
 if [ -z "$(tr -d '[:space:]' <<<"${entries}")" ]; then
   echo "::notice::no entries to assemble"
