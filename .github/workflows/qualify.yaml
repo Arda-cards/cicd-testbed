@@ -35,7 +35,7 @@ jobs:
       # The marker comes from the resolver, not from the action going looking
       # for it. That is the whole of the change being exercised here.
       - id: changelog
-        uses: Arda-cards/synthesize-changelog-entry@4098b4f8688bbf67bc743fd2286bd68b9d47809f
+        uses: Arda-cards/synthesize-changelog-entry@dcb81efd50a49df15853aaeea3121dc1f6425a70
         with:
           require_entry: "false"
         env:

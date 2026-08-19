@@ -41,6 +41,9 @@ read_output() {
 resolve_entry() {
   local out
   out="$(mktemp)"
+  # A range can cover many merges, so the file goes when the function does
+  # rather than accumulating one per pull request.
+  trap 'rm -f "${out}"' RETURN
   if ! GITHUB_OUTPUT="${out}" PR="${1}" CHANGELOG_DIR="${changelog_dir}" REQUIRE_ENTRY=true \
       .synthesize/synthesize.sh >&2; then
     return 1

@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: Arda-cards/synthesize-changelog-entry
-          ref: 4098b4f8688bbf67bc743fd2286bd68b9d47809f
+          ref: dcb81efd50a49df15853aaeea3121dc1f6425a70
           path: .synthesize
 
       # CODEOWNERS can break after a merge — a team renamed, access revoked —
