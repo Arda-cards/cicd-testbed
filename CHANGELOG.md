@@ -17,6 +17,14 @@ Categories, defined in [changemap.json](.github/clq/changemap.json):
   - `Fixed` for any bugfixes.
   - `Security` in case of vulnerabilities.
 
+## [4.3.1] - 2026-08-19
+
+### Fixed
+
+- Assembly asks the changelog resolver for the entries it needs, rather than checking the resolver out and calling the script behind its action. The resolver now takes a list of pull requests and returns one manifest each, so composing a release no longer depends on another component's internals staying where they are.
+> [!note]
+> Authored by Claude Opus 5 for jmpicnic
+
 ## [4.3.0] - 2026-08-19
 
 ### Added
