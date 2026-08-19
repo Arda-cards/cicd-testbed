@@ -17,6 +17,13 @@ Categories, defined in [changemap.json](.github/clq/changemap.json):
   - `Fixed` for any bugfixes.
   - `Security` in case of vulnerabilities.
 
+## [4.3.0] - 2026-08-19
+
+### Added
+
+- Batch entry C, the partner for the second batch attempt.
+- Batch entry b, written as a file so the merge group stages two of them.
+
 ## [4.2.1] - 2026-08-19
 
 ### Fixed
