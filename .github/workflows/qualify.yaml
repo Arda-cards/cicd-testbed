@@ -29,11 +29,24 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v7
-      - id: qualify-build
-        uses: Arda-cards/qualify-build-action@v2
+      # The marker comes from the resolver, not from the action going looking
+      # for it. That is the whole of the change being exercised here.
+      - id: changelog
+        uses: Arda-cards/synthesize-changelog-entry@4098b4f8688bbf67bc743fd2286bd68b9d47809f
         with:
+          require_entry: "false"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - id: qualify-build
+        # TEMPORARY PIN — qualify-build-action#9, unreleased. Pinned by commit so
+        # the shape can be exercised here before it is published to the ten
+        # repositories that consume this action. Becomes @v2.2.0 once released.
+        uses: Arda-cards/qualify-build-action@d5a7b184d55064edc1e68c08e05e79595dfb90d9
+        with:
+          feature_marker: ${{ steps.changelog.outputs.marker }}
           # This repository composes its changelog after merge, so a pull
           # request introduces no new version and clq-action's "exactly one new
           # version" check would reject every one of them. The guarantee is not
@@ -44,6 +57,8 @@ jobs:
       - name: "Report the classification"
         env:
           KIND: ${{ steps.qualify-build.outputs.kind }}
+          MARKER: ${{ steps.changelog.outputs.marker }}
+          ROUTE: ${{ steps.changelog.outputs.route }}
           TAG: ${{ steps.qualify-build.outputs.tag }}
           TARGET: ${{ steps.qualify-build.outputs.target }}
           TRIGGER: ${{ steps.qualify-build.outputs.trigger }}
@@ -56,6 +71,8 @@ jobs:
             echo "# qualify on ${GITHUB_EVENT_NAME}"
             echo '| output | value |'
             echo '|---|---|'
+            echo "| route | \`${ROUTE:-<empty>}\` |"
+            echo "| marker | \`${MARKER:-<empty>}\` |"
             echo "| trigger | \`${TRIGGER:-<empty>}\` |"
             echo "| target | \`${TARGET:-<empty>}\` |"
             echo "| kind | \`${KIND:-<empty>}\` |"

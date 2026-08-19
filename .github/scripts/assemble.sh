@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 #
-# Composes one release block from every merge since the previous assembly, then
-# commits, tags, and creates the GitHub Release.
+# Composes one release block from every merge since the previous assembly and
+# commits it. It does not tag and does not create a Release.
+#
+# In this model CHANGELOG.md *is* the build-time version source, so the build
+# derives the version, cuts the tag and publishes. Assembly writing the file and
+# also tagging is two components claiming the same job: when both ran for real
+# on 2026-08-18, assembly tagged v8.0.0 and the build then failed on the tag it
+# could not create, leaving a published Release with no artifact behind it.
 #
 # The range is the point. Taking "every merge since the last assembly commit"
 # rather than "the merge that triggered this run" means a failed run loses
@@ -17,6 +23,31 @@ readonly changemap=".github/clq/changemap.json"
 readonly changelog_dir=".changelog"
 readonly assembly_prefix="chore: assemble CHANGELOG "
 
+# Reads one value out of a GITHUB_OUTPUT-format file, plain or heredoc-quoted.
+# Written generically so it does not depend on which delimiter the producer
+# chose.
+read_output() {
+  awk -v key="$2" '
+    $0 ~ "^" key "<<"            { delim = substr($0, length(key) + 3); inside = 1; next }
+    inside && $0 == delim        { inside = 0; next }
+    inside                       { print; next }
+    index($0, key "=") == 1      { print substr($0, length(key) + 2) }
+  ' "$1"
+}
+
+# synthesize-changelog-entry is a composite action, but assembly needs it once
+# per merged pull request rather than once per job, so it calls the script the
+# action wraps. The workflow checks the component out at .synthesize/.
+resolve_entry() {
+  local out
+  out="$(mktemp)"
+  if ! GITHUB_OUTPUT="${out}" PR="${1}" CHANGELOG_DIR="${changelog_dir}" REQUIRE_ENTRY=true \
+      .synthesize/synthesize.sh >&2; then
+    return 1
+  fi
+  read_output "${out}" entry
+}
+
 clq() {
   docker run --rm \
     --volume "${PWD}/${1}:/home/CHANGELOG.md:ro" \
@@ -26,16 +57,24 @@ clq() {
 
 # --- the range ---------------------------------------------------------------
 
-# The last release tag bounds the range: everything published is behind it,
-# everything pending is ahead. In steady state that is the previous assembly,
-# because assembly is what creates the tag.
+# Assembly's own previous commit bounds the range. The tag was the right
+# boundary only while assembly was what created it; now that the build owns
+# tagging, a build failing after a successful assembly leaves no tag, and the
+# next run would reach back over merges it had already covered — collecting an
+# entry twice where the pull request used the body route, and failing outright
+# where it used the file route and the file was already consumed.
 #
-# It is deliberately not "the previous assembly commit". A repository adopting
-# this model has no assembly commit, so that reading makes the first range the
-# entire history — including merges that predate the model and have no entry to
-# collect. The last hand-made release tag is exactly the right boundary on the
-# first run and stays right on every run after it.
-previous="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+# --first-parent keeps this on the mainline: a plain --grep walks every
+# reachable commit, including assembly commits on branches that were merged in.
+previous="$(git log --first-parent --format='%H' --grep="^${assembly_prefix}" --max-count=1 HEAD 2>/dev/null || true)"
+
+# The tag remains the fallback, and that is what keeps the first run correct: a
+# repository adopting this model has no assembly commit yet, so without it the
+# first range would be the entire history — including merges that predate the
+# model and have no entry to collect.
+if [ -z "${previous}" ]; then
+  previous="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+fi
 
 if [ -n "${previous}" ]; then
   readonly range="${previous}..HEAD"
@@ -63,7 +102,7 @@ for merge in "${merges[@]}"; do
   fi
 
   echo "::notice::collecting #${pr}"
-  if ! entry="$(.github/scripts/changelog-entry.sh "${pr}")"; then
+  if ! entry="$(resolve_entry "${pr}")"; then
     echo "::error::#${pr} has no resolvable changelog entry; it should not have merged"
     exit 1
   fi
@@ -177,9 +216,6 @@ for attempt in 1 2 3; do
   fi
 done
 
-git tag -a "v${next}" -m "Release ${next}"
-git push origin "v${next}"
-
-gh release create "v${next}" \
-  --title "Release ${next}" \
-  --notes "$(printf '%s\n\nCovers %s.\n' "${merged}" "${prs[*]}")"
+# No tag, and no Release. The build derives the version from the file this
+# commit just wrote, and publishing is its job alone.
+echo "::notice::${next} written; the build publishes it"

@@ -1,6 +1,8 @@
 ---
 # Composes CHANGELOG.md after merge, then lets the build publish from the
-# commit it produced.
+# commit it produced. It writes the file and stops: it does not tag and does not
+# create a Release, because in this model the build derives the version from the
+# file and publishing is its job alone.
 #
 # The unit of work is a *range*: every merge since the previous assembly commit,
 # not just the merge that triggered this run. That is what makes it self-healing
@@ -36,10 +38,27 @@ jobs:
         with:
           app-id: ${{ secrets.CHANGELOG_BOT_APP_ID }}
           private-key: ${{ secrets.CHANGELOG_BOT_PRIVATE_KEY }}
+          # Scoped to both repositories. The default is this one alone, and the
+          # resolver below lives in the other.
+          owner: ${{ github.repository_owner }}
+          repositories: |
+            cicd-testbed
+            synthesize-changelog-entry
 
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      # synthesize-changelog-entry is a composite action, but assembly needs it
+      # once per merged pull request rather than once per job — a `uses:` step
+      # cannot loop. So the component is checked out and the script the action
+      # wraps is called directly. Same code, same rules, called differently.
+      - uses: actions/checkout@v7
+        with:
+          repository: Arda-cards/synthesize-changelog-entry
+          ref: 4098b4f8688bbf67bc743fd2286bd68b9d47809f
+          path: .synthesize
           token: ${{ steps.app-token.outputs.token }}
 
       # CODEOWNERS can break after a merge — a team renamed, access revoked —
