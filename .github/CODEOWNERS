@@ -1,4 +1,10 @@
 # Every path is owned. Code-owner review is therefore required on every pull
 # request, including changes to the machinery in .github/ that enforces the
 # rest — so the rules can only be changed by the process the rules describe.
-* @Arda-cards/engineering
+#
+# `systems-arda` is listed alongside the team, as it already is in `operations`.
+# An author cannot approve their own pull request, so a change authored by the
+# only available team reviewer would otherwise have nobody able to approve it.
+# It is an administrative account with tightly controlled use: a person uses it
+# deliberately, and no automated process may.
+* @Arda-cards/engineering @systems-arda
