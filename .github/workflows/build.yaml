@@ -1,6 +1,6 @@
 ---
 # A synthetic stand-in for the real build, whose only job is to prove the
-# ordering this project inverts.
+# decisions this project rearranges.
 #
 # In `operations`, `common-module` and `infrastructure`, CHANGELOG.md *is* the
 # build-time version source — the version, tag, image tag, chart version and
@@ -8,13 +8,19 @@
 # *before* the build, the reverse of the reference model where the build runs
 # first and assembly follows.
 #
-# This build therefore refuses to publish unless it is standing on an assembly
-# commit. That single assertion is the thing worth proving cheaply.
+# Two assertions are worth proving cheaply here:
+#
+#   1. A release publish stands on an assembly commit, never on the merge commit
+#      — which would derive the *previous* version and ship the wrong artifact
+#      under the right name.
+#   2. A feature build takes its marker from the resolved manifest rather than
+#      going looking for one, and reaches `dev` and nothing else.
 name: build
 
 on:
+  # Unfiltered on purpose: a marked branch publishes on every push whether or
+  # not a pull request exists, which is the case the marker is for.
   push:
-    branches: [main]
   pull_request:
     types: [opened, ready_for_review, reopened, synchronize]
   merge_group:
@@ -26,8 +32,22 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v7
+
+      # The same component the merge gate and assembly consult. A build that
+      # derives the marker itself is a build that can disagree with the gate
+      # about whether a branch is marked, which is what used to happen.
+      - id: changelog
+        name: "Resolve the changelog manifest"
+        uses: Arda-cards/synthesize-changelog-entry@dcb81efd50a49df15853aaeea3121dc1f6425a70
+        with:
+          # A build wants to know whether there is a marker. A branch with
+          # nothing to say is an ordinary build, not an error.
+          require_entry: "false"
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: "Derive the version from the changelog"
         id: version
@@ -44,8 +64,10 @@ jobs:
           echo "::notice::version is ${version}"
           echo "version=${version}" >>"${GITHUB_OUTPUT}"
 
-      - name: "Publish, but only from an assembly commit"
+      - name: "Decide what this build is, and what it may reach"
         env:
+          MARKER: ${{ steps.changelog.outputs.marker }}
+          ROUTE: ${{ steps.changelog.outputs.route }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           [ "${RUNNER_DEBUG}" == 1 ] && set -xv
@@ -53,29 +75,71 @@ jobs:
 
           subject="$(git log -1 --format=%s)"
 
-          if [ "${GITHUB_EVENT_NAME}" != "push" ]; then
-            echo "::notice::${GITHUB_EVENT_NAME} build: test only, nothing published"
+          report() {
+            {
+              echo "# build on ${GITHUB_EVENT_NAME}"
+              echo '| | |'
+              echo '|---|---|'
+              echo "| route | \`${ROUTE:-<empty>}\` |"
+              echo "| marker | \`${MARKER:-<empty>}\` |"
+              echo "| kind | \`${1}\` |"
+              echo "| version | \`${2:-<none>}\` |"
+              echo "| environments | \`${3:-<none>}\` |"
+            } >>"${GITHUB_STEP_SUMMARY}"
+            echo "::notice::${1}${2:+ ${2}}${3:+ -> ${3}}"
+          }
+
+          # A queued build gates a merge; it does not release. Asserted rather
+          # than assumed, because a queued publish would release code that has
+          # not been merged.
+          if [ "${GITHUB_EVENT_NAME}" == "merge_group" ]; then
+            if [ -n "${MARKER}" ]; then
+              echo "::error::a queued entry carries the feature-build marker ${MARKER}; merge-eligibility should have rejected it"
+              exit 1
+            fi
+            report test "" ""
+            exit 0
+          fi
+
+          if [ "${GITHUB_EVENT_NAME}" == "pull_request" ]; then
+            report test "" ""
+            exit 0
+          fi
+
+          # --- push -------------------------------------------------------
+
+          if [ -n "${MARKER}" ]; then
+            if [ "${GITHUB_REF_NAME}" == "main" ]; then
+              echo "::error::main carries the feature-build marker ${MARKER}; it should never have merged"
+              exit 1
+            fi
+            # A prerelease of the version the change will become, so it sorts
+            # before the release it anticipates.
+            feature="${VERSION}-${MARKER}-${GITHUB_RUN_ID}.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+            # dev alone, and by construction: no other environment appears here,
+            # so relaxing an approval gate elsewhere cannot reach a marked
+            # branch by omission.
+            report publish "${feature}" dev
+            exit 0
+          fi
+
+          if [ "${GITHUB_REF_NAME}" != "main" ]; then
+            report test "" ""
             exit 0
           fi
 
           if [[ "${subject}" != "chore: assemble CHANGELOG "* ]]; then
+            report test "" ""
             echo "::notice::not an assembly commit; nothing to publish"
             exit 0
           fi
 
           # The assertion this workflow exists for: the version the build would
-          # publish must be the one assembly just wrote. If publishing could fire
-          # on the merge commit instead, it would derive the *previous* version
-          # and ship the wrong artifact under the right name.
+          # publish must be the one assembly just wrote.
           assembled="${subject#chore: assemble CHANGELOG }"
           if [ "${VERSION}" != "${assembled}" ]; then
             echo "::error::build derived ${VERSION} but assembly wrote ${assembled}"
             exit 1
           fi
 
-          echo "::notice::publishing ${VERSION}"
-          {
-            echo "# published"
-            echo "- version: \`${VERSION}\`"
-            echo "- commit: \`${GITHUB_SHA}\`"
-          } >>"${GITHUB_STEP_SUMMARY}"
+          report publish "${VERSION}" "dev, stage, demo, prod"

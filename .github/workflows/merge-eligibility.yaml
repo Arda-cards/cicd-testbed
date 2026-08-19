@@ -13,6 +13,11 @@
 # auto-passing. A required check that skips reports success without having
 # evaluated anything, which is indistinguishable from passing — the reference
 # implementations carry that hole today.
+#
+# The manifest is resolved once, by synthesize-changelog-entry, and the results
+# are handed to the assertions that need them. Each assertion used to resolve it
+# again for itself, which is how the marker check and the build came to disagree
+# about whether a branch was marked.
 name: merge-eligibility
 
 on:
@@ -62,14 +67,27 @@ jobs:
           REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: .github/scripts/check-codeowners.sh "${REF}"
 
+      # Resolved once. Everything below consumes this answer rather than
+      # deriving its own.
+      - id: changelog
+        name: "Resolve the changelog manifest"
+        uses: Arda-cards/synthesize-changelog-entry@dcb81efd50a49df15853aaeea3121dc1f6425a70
+        with:
+          pr: ${{ steps.pr.outputs.number }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+
       - name: "Not a draft, and not marked as a feature build"
         env:
           GH_TOKEN: ${{ github.token }}
+          MARKER: ${{ steps.changelog.outputs.marker }}
           PR: ${{ steps.pr.outputs.number }}
         run: .github/scripts/check-mergeable.sh "${PR}"
 
-      - name: "Exactly one changelog entry, and it is valid"
+      - name: "The changelog entry is valid"
         env:
+          ENTRY: ${{ steps.changelog.outputs.entry }}
           GH_TOKEN: ${{ github.token }}
           PR: ${{ steps.pr.outputs.number }}
+          ROUTE: ${{ steps.changelog.outputs.route }}
         run: .github/scripts/check-changelog.sh "${PR}"
